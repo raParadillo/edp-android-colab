@@ -12,16 +12,20 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.AlertDialogDefaults.containerColor
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -41,6 +45,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -70,20 +75,34 @@ fun ProfileScreen() {
                 title = { Text("My Profile", color = MaterialTheme.colorScheme.primary) },
                 navigationIcon = {
                     IconButton(onClick = {}) {
-                        Icon(Icons.Default.Menu, contentDescription = "Menu", tint = MaterialTheme.colorScheme.primary);
-
+                        Icon(Icons.Default.Menu, contentDescription = "Menu", tint = MaterialTheme.colorScheme.primary)
                     }
                 },
                 actions = {
                     IconButton(onClick = {}) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "Add", tint = MaterialTheme.colorScheme.primary)
+                        Icon(Icons.Default.MoreVert, contentDescription = "More options", tint = MaterialTheme.colorScheme.primary)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant
                 )
             )
+        },
+
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { /* Handle FAB click here */ },
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                shape = CircleShape // Makes it perfectly round like in the wireframe
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "Add"
+                )
+            }
         }
+
     ) { padding ->
         Column(
             modifier = Modifier
@@ -104,7 +123,17 @@ fun ProfileScreen() {
                         .border(2.dp, MaterialTheme.colorScheme.primary, CircleShape),
                     contentScale = ContentScale.Crop
                 )
-                // You could add a badge here if needed
+                Box(
+                    modifier = Modifier
+                        .size(24.dp) // Size of the status indicator
+                        .clip(CircleShape)
+                        .background(Color(0xFF4CAF50))
+                        .border(
+                            width = 3.dp,
+                            color = MaterialTheme.colorScheme.background, // Matches screen background to look like a cutout/border
+                            shape = CircleShape
+                        )
+                )
             }
 
             Text(
@@ -153,17 +182,106 @@ fun ProfileScreen() {
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(8.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-
-                ) { }
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    ProfileStatColumn(value = "128", label = "Posts")
+                    ProfileStatColumn(value = "4.2k", label = "Followers")
+                    ProfileStatColumn(value = "96", label = "Following")
+                }
             }
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Email,
+                            contentDescription = "Email",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "ada@compute.org",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Place,
+                            contentDescription = "Location",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "London, United Kingdom",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+
+
+
 
 
         }
     }
 }
 
-@Preview(showBackground = true)
+
+@Composable
+fun ProfileStatColumn(
+    value: String,
+    label: String,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+
+
+@Preview(
+    name = "Light Mode",
+    showBackground = true
+)
+@Preview(
+    name = "Dark Mode",
+    showBackground = true,
+    uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES
+)
 @Composable
 fun ProfilePreview() {
     MyApplicationTheme {
