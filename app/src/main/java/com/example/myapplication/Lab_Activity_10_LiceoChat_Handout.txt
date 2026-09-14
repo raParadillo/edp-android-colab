@@ -1,639 +1,0 @@
-﻿LICEO DE CAGAYAN UNIVERSITY
-College of Information Technology
-Fundamentals of Enterprise Data Management  ·  Event-Driven Programming
-S.Y. 2026-2027  ·  1st Semester
-LABORATORY ACTIVITY 10
-LiceoChat - A Shared Class Chat App
-Networking & REST APIs  ·  Retrofit  ·  kotlinx.serialization  ·  Repository Pattern
-InstructorMr. Ernesto Razo Jr.Duration90 minutes (in class)TopicLecture 11 - Networking & REST APIsTotal points100  (+10 bonus)LanguageKotlin  ·  Jetpack ComposeGit branchlab-activity-10Works in pairs?No - individual workSubmit byEnd of the laboratory period
-Name____________________________Section_____________Date____________________________Score_______ / 100
-1  ·  What You Will Build
-You will build LiceoChat, a small chat app for this class. Everybody in the room talks to the SAME server, so the messages you see on your phone are the messages your classmates are typing right now. When you send a message, it appears on their screens too.
-There is one screen. It has three parts:
-• A list of messages - who sent it, what they said, and when. Newest at the top.
-• A text box and a Send button at the bottom of the screen.
-• A Refresh button in the top bar, so you can pull the newest messages.
-
-WHY THIS APP  Everything you will write today is what you did in the lecture, in the same order: a data class for the JSON, a Retrofit interface, a repository that returns a result instead of throwing, a mapper, and a screen with four states. The only new thing is that you will also SEND data, not just read it.
-The four screen states you must handle
-StateWhen it happensWhat the user must seeLoadingWhile the app is fetching messages.A spinner in the middle of the screen.ReadyMessages came back.The list of messages, newest first.EmptyThe call worked but there are no messages yet.A friendly line such as "No messages yet. Say hello!"ErrorNo internet, a timeout, or the server failed.A short message AND a Retry button.
-CAREFUL  "No messages" is NOT an error. It means the call succeeded and the list was empty. If you show the error screen for an empty list, you lose points - and your users get confused.2  ·  What You Are Practising
-By the end of this activity you should be able to:
-1. Write a @Serializable data class that matches a real JSON response, using nullable fields and default values.
-2. Declare a Retrofit interface with @GET, @POST, @Query and @Body, and build the Retrofit instance correctly.
-3. Write a repository that catches network exceptions and returns a named result instead of crashing.
-4. Write a mapper that turns the server's class (DTO) into your own clean class.
-5. Build a Compose screen that draws all four states and lets the user send a message.
-3  ·  Before You Start
-You needNotesAndroid StudioAny recent version. The same one you used for Lab Activity 9.Your course repositoryThe same Git repository you have been pushing to all semester.Internet on the emulator or phoneThe app talks to a real server. Check the browser works first.The class API addressYour instructor will write it on the board. Copy it into the box below.
-Write the class API address here
-BASE URL  https://6a9b85920ad174e139e8b0f2.mockapi.io/chat-messaging/api/v1/messages
-TWO RULES ABOUT THIS ADDRESS  It MUST end with a slash  /  - Retrofit refuses to start without it.
-It MUST start with https:// - Android blocks plain http:// by default.4  ·  The Class API
-Everyone in this room uses ONE server. That is what makes the chat work - your POST becomes your classmate's GET.
-
-MethodPathWhat it doesGETmessages?sortBy=createdAt&order=descGives you every message, newest first.POSTmessagesAdds one new message. The server gives it an id.
-What GET messages sends back
-A real answer from the class API - shortened to two messages
-[
-  {
-    "id": "14",
-    "sender": "Ana Reyes",
-    "text": "Good morning everyone!",
-    "createdAt": 1757001234567
-  },
-  {
-    "id": "13",
-    "sender": "Jun Dela Cruz",
-    "text": "My Retrofit finally works",
-    "createdAt": 1757001200000
-  }
-]
-What you send when you POST
-The body of your POST request - you do NOT send an id, the server makes one
-{
-  "sender": "Your Name",
-  "text": "Hello from my app",
-  "createdAt": 1757001300000
-}
-READ THIS BEFORE YOU TYPE ANYTHING  The outer brackets [ ] in the GET answer mean it is a LIST. So your Retrofit function must return List<MessageDto>, not MessageDto.
-createdAt is a big number - the number of milliseconds since 1970. In Kotlin that is a Long, not an Int.
-id comes back as a STRING in quotes, not a number. Declare it as String.
-HOUSE RULES FOR THE CLASS CHAT  Use your real first name and surname as the sender. Anonymous messages get no credit.
-Keep it clean and keep it in this class. Anything you send is visible to every classmate and to your instructor.
-Do not delete other people's messages, even if you work out how.
-
-Part A  ·  Set Up Your Branch and Your Project
-Everything you submit today must be on a branch called lab-activity-10. If your work is on any other branch, it will not be marked.
-A1 · Create the branch
-Open the Terminal tab in Android Studio and run these commands one at a time.
-Terminal
-# make sure you are starting from a clean, up-to-date main branch
-git checkout main
-git pull
- 
-# create the branch for this activity and switch to it
-git checkout -b lab-activity-10
- 
-# check it worked - the star must be on lab-activity-10
-git branch
-HOW TO KNOW YOU ARE ON THE RIGHT BRANCH  Run git branch. The line with the * in front of it is the branch you are on. It must say lab-activity-10. You can also read it in the bottom-right corner of the Android Studio window. You will screenshot this later, so get it right now.
-A2 · Add the libraries
-Open app/build.gradle.kts and add these lines. Then click Sync Now.
-app/build.gradle.kts
-plugins {
-    alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
-    alias(libs.plugins.kotlin.serialization)          // GIVEN - needed by @Serializable
-}
- 
-dependencies {
-    implementation("com.squareup.retrofit2:retrofit:3.0.0")
-    implementation("com.squareup.retrofit2:converter-kotlinx-serialization:3.0.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
-    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
- 
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0")
-}
-A3 · Ask for permission to use the internet
-Open AndroidManifest.xml and add this line above the <application> tag.
-app/src/main/AndroidManifest.xml
-<uses-permission android:name="android.permission.INTERNET" />
-IF YOU FORGET THIS ONE LINE  Your app will crash with SecurityException: Permission denied (missing INTERNET permission?). It looks frightening. It is one line.
-A4 · Make the folders
-Inside your package, create these folders. Right-click the package name, then New, then Package.
-Folder plan - use your own package name
-com.liceo.liceochat
-├── core            # AppResult
-├── data
-│   ├── network     # ChatApiService, NetworkModule
-│   │   └── dto     # MessageDto, NewMessageDto, MessageMappers
-│   └── repository  # ChatRepositoryImpl
-├── domain          # Message, ChatRepository
-└── ui              # ChatViewModel, ChatUiState, ChatScreen
-
-Part B  ·  The Message Classes    (TODO 1 - 3)
-Three small files. One matches the server, one is yours, and one converts between them.
-TODO 1 · The class that matches the JSON
-Create data/network/dto/MessageDto.kt and complete it.
-data/network/dto/MessageDto.kt
-package com.liceo.liceochat.data.network.dto
- 
-import kotlinx.serialization.Serializable
- 
-@Serializable
-data class MessageDto(
-    // TODO 1a: add id. It arrives as a string in quotes.
-    //          Make it nullable with a default of null.
- 
-    // TODO 1b: add sender. Same idea - a nullable String with a default of null.
- 
-    // TODO 1c: add text. A nullable String with a default of null.
- 
-    // TODO 1d: add createdAt. It is a big number of milliseconds,
-    //          so use Long, nullable, with a default of null.
-)
- 
-@Serializable
-data class NewMessageDto(                          // GIVEN (read it, do not change it)
-    val sender: String,                     // no id here - the server makes it
-    val text: String,
-    val createdAt: Long
-)HINTS
-• 1a - the line looks like this:   val id: String? = null
-• 1b and 1c are exactly the same shape as 1a, just different names.
-• 1d uses Long instead of String:   val createdAt: Long? = null
-• Why nullable with defaults? Because you do not control the server. If a field is ever missing or null, your app must not crash. This is the defensive DTO from the lecture.
-• NewMessageDto is NOT nullable, because you are the one filling it in and you know the values are there.
-TODO 2 · Your own clean class
-Create domain/Message.kt. Notice there is no ? anywhere - this is the class your screen will trust.
-domain/Message.kt
-package com.liceo.liceochat.domain
- 
-data class Message(
-    // TODO 2a: add id as a String (NOT nullable)
- 
-    // TODO 2b: add sender as a String (NOT nullable)
- 
-    // TODO 2c: add text as a String (NOT nullable)
- 
-    // TODO 2d: add createdAt as a Long (NOT nullable)
-)HINTS
-• 2a is:   val id: String,
-• 2b is:   val sender: String,
-• 2c is:   val text: String,
-• 2d is:   val createdAt: Long        (no comma after the last one)
-• There is no @Serializable here and no import. This class never touches JSON - that is the whole point.
-• If you find yourself typing a ? in this file, stop and re-read the sentence above the code box.
-TODO 3 · The mapper
-Create data/network/dto/MessageMappers.kt. This is where "maybe missing" becomes "definitely there".
-data/network/dto/MessageMappers.kt
-package com.liceo.liceochat.data.network.dto
- 
-import com.liceo.liceochat.domain.Message
- 
-fun MessageDto.toDomain(): Message = Message(
-    id = id ?: "",                          // GIVEN - copy this pattern
- 
-    // TODO 3a: sender - use the sender, but if it is null use "Unknown" instead
- 
-    // TODO 3b: text - use the text, but if it is null use an empty string ""
- 
-    // TODO 3c: createdAt - use createdAt, but if it is null use 0L
-)
- 
-fun List<MessageDto>.toDomain(): List<Message> =   // GIVEN (read it, do not change it)
-    map { it.toDomain() }HINTS
-• The ?: symbol is called the Elvis operator. It means "use the thing on the left, unless it is null, then use the thing on the right".
-• 3a looks like:   sender = sender ?: "Unknown",
-• 3b is the same shape with "" on the right.
-• 3c uses 0L - the L tells Kotlin it is a Long, not an Int.
-• Do not forget the comma at the end of each line except the last one.
-
-Part C  ·  Talking to the API    (TODO 4 - 6)
-TODO 4 and 5 · The Retrofit interface
-Create data/network/ChatApiService.kt. This file describes the API. You never write a class that implements it - Retrofit builds one for you.
-data/network/ChatApiService.kt
-package com.liceo.liceochat.data.network
- 
-import com.liceo.liceochat.data.network.dto.MessageDto
-import com.liceo.liceochat.data.network.dto.NewMessageDto
-import retrofit2.http.Body
-import retrofit2.http.GET
-import retrofit2.http.POST
-import retrofit2.http.Query
- 
-interface ChatApiService {
- 
-    // TODO 4: get every message, newest first.
-    //   - annotate it with @GET and the path  messages  (NO slash in front)
-    //   - it must be a suspend function
-    //   - it returns List<MessageDto>
-    //   - add two @Query parameters so the server sorts for us:
-    //         @Query("sortBy") sortBy: String = "createdAt"
-    //         @Query("order")  order:  String = "desc"
- 
- 
-    // TODO 5: send one new message.
-    //   - annotate the function with @POST and the path  messages
-    //   - it must be a suspend function
-    //   - it takes one parameter annotated with @Body of type NewMessageDto
-    //   - it returns MessageDto (the server echoes back what it saved, with an id)
- 
-}HINTS
-• TODO 4 starts like this:   @GET("messages")   then on the next line   suspend fun getMessages(
-• Write @GET("messages") and NOT @GET("/messages"). A slash at the front throws away the /api/v1 part of your base URL and you will get a 404.
-• TODO 5 starts:   @POST("messages")   then   suspend fun sendMessage(@Body message: NewMessageDto): MessageDto
-• Both functions need the word suspend. Without it your app crashes with NetworkOnMainThreadException.
-• If Android Studio underlines @GET in red, your import line for retrofit2.http.GET is missing.
-TODO 6 · Build the Retrofit instance
-Create data/network/NetworkModule.kt. Almost all of this is given. You only paste your base URL.
-data/network/NetworkModule.kt
-package com.liceo.liceochat.data.network
- 
-import kotlinx.serialization.json.Json
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
-import okhttp3.logging.HttpLoggingInterceptor
-import retrofit2.Retrofit
-import retrofit2.converter.kotlinx.serialization.asConverterFactory
-import java.util.concurrent.TimeUnit
- 
-object NetworkModule {
- 
-    // TODO 6: paste the class API address your instructor wrote on the board.
-    //         It MUST end with a slash /
-    private const val BASE_URL = "PASTE_THE_CLASS_API_ADDRESS_HERE"
- 
-    private val json = Json {                      // GIVEN (read it, do not change it)
-        ignoreUnknownKeys = true
-        coerceInputValues = true
-    }
- 
-    private val logging = HttpLoggingInterceptor().apply {
-        level = HttpLoggingInterceptor.Level.BODY   // prints every call into Logcat
-    }
- 
-    private val client = OkHttpClient.Builder()
-        .addInterceptor(logging)
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(20, TimeUnit.SECONDS)
-        .build()
- 
-    val chatApi: ChatApiService = Retrofit.Builder()
-        .baseUrl(BASE_URL)
-        .client(client)
-        .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
-        .build()
-        .create(ChatApiService::class.java)
-}HINTS
-• Paste the address exactly as it is on the board, keeping the https:// at the front and the / at the end.
-• If you see IllegalArgumentException: baseUrl must end in / - you dropped the last slash.
-• The logging interceptor is your best friend today. Open Logcat and filter for OkHttp to see every request and answer.
-
-Part D  ·  The Repository    (TODO 7 - 8)
-The repository is the only class in your app that is allowed to know about HTTP. It catches the network problems and hands back a plain result, so your ViewModel never has to know what a timeout is.
-Given file · core/AppResult.kt
-Create this file and copy it exactly. There is nothing to complete.
-core/AppResult.kt
-package com.liceo.liceochat.core
- 
-sealed interface AppResult<out T> {                 // GIVEN (read it, do not change it)
- 
-    data class Success<T>(val data: T) : AppResult<T>
- 
-    sealed interface Failure : AppResult<Nothing> {
-        data object NoInternet : Failure
-        data object Timeout    : Failure
-        data class  Unknown(val message: String?) : Failure
-    }
-}
-Given file · domain/ChatRepository.kt
-Create this file and copy it exactly. Notice it talks about Message, never MessageDto.
-domain/ChatRepository.kt
-package com.liceo.liceochat.domain
- 
-import com.liceo.liceochat.core.AppResult
- 
-interface ChatRepository {                          // GIVEN (read it, do not change it)
-    suspend fun getMessages(): AppResult<List<Message>>
-    suspend fun sendMessage(sender: String, text: String): AppResult<Unit>
-}
-TODO 7 and 8 · The implementation
-Create data/repository/ChatRepositoryImpl.kt and complete the two functions.
-data/repository/ChatRepositoryImpl.kt
-package com.liceo.liceochat.data.repository
- 
-import com.liceo.liceochat.core.AppResult
-import com.liceo.liceochat.data.network.ChatApiService
-import com.liceo.liceochat.data.network.dto.NewMessageDto
-import com.liceo.liceochat.data.network.dto.toDomain
-import com.liceo.liceochat.domain.ChatRepository
-import com.liceo.liceochat.domain.Message
-import java.io.IOException
-import java.net.SocketTimeoutException
-import java.net.UnknownHostException
- 
-class ChatRepositoryImpl(
-    private val api: ChatApiService                 // GIVEN - passed in, not fetched
-) : ChatRepository {
- 
-    // TODO 7: get the messages.
-    //   - call  api.getMessages()
-    //   - turn the list of MessageDto into a list of Message with  .toDomain()
-    //   - wrap the whole thing in  safeCall { ... }
-    override suspend fun getMessages(): AppResult<List<Message>> =
-        TODO("replace this whole line")
- 
- 
-    // TODO 8: send a message.
-    //   - build a NewMessageDto with sender, text and System.currentTimeMillis()
-    //   - call  api.sendMessage(...)  with it
-    //   - the result of the block should be  Unit
-    //   - wrap it in  safeCall { ... }
-    override suspend fun sendMessage(sender: String, text: String): AppResult<Unit> =
-        TODO("replace this whole line")
- 
- 
-    private inline fun <T> safeCall(block: () -> T): AppResult<T> =
-        try { AppResult.Success(block()) }           // GIVEN (read it, do not change it)
-        catch (e: UnknownHostException)   { AppResult.Failure.NoInternet }
-        catch (e: SocketTimeoutException) { AppResult.Failure.Timeout }
-        catch (e: IOException)            { AppResult.Failure.NoInternet }
-        catch (e: Exception)              { AppResult.Failure.Unknown(e.message) }
-}HINTS
-• TODO 7 is one line:   safeCall { api.getMessages().toDomain() }
-• TODO 8 is three lines inside the braces: build the NewMessageDto, call the api with it, then write Unit on its own line as the last line of the block.
-• For TODO 8 the body looks like:   safeCall { val dto = NewMessageDto(sender, text, System.currentTimeMillis()); api.sendMessage(dto); Unit }  - but write it on separate lines, not with semicolons.
-• Unit must be the LAST line inside safeCall for TODO 8, because the function promises AppResult<Unit>.
-• Do not add any try/catch of your own. safeCall already does it, and it is given to you.
-
-Part E  ·  The ViewModel and the Screen    (TODO 9 - 12)
-Given file · ui/ChatUiState.kt
-Create this file and copy it exactly.
-ui/ChatUiState.kt
-package com.liceo.liceochat.ui
- 
-import com.liceo.liceochat.domain.Message
- 
-sealed interface ChatUiState {                      // GIVEN (read it, do not change it)
-    data object Loading : ChatUiState
-    data object Empty   : ChatUiState
-    data class  Ready(val messages: List<Message>) : ChatUiState
-    data class  Error(val message: String) : ChatUiState
-}
-TODO 9, 10 and 11 · The ViewModel
-Create ui/ChatViewModel.kt and complete the three TODOs.
-ui/ChatViewModel.kt
-package com.liceo.liceochat.ui
- 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
-import com.liceo.liceochat.core.AppResult
-import com.liceo.liceochat.domain.ChatRepository
-import kotlinx.coroutines.launch
- 
-class ChatViewModel(
-    private val repository: ChatRepository          // GIVEN
-) : ViewModel() {
- 
-    var uiState: ChatUiState by mutableStateOf(ChatUiState.Loading)   // GIVEN
-        private set
- 
-    var myName: String by mutableStateOf("")        // GIVEN - the name typed in the app
-        private set
- 
-    var draft: String by mutableStateOf("")         // GIVEN - the message being typed
-        private set
- 
-    fun onNameChange(value: String) { myName = value }      // GIVEN
-    fun onDraftChange(value: String) { draft = value }      // GIVEN
- 
-    init { load() }                                 // GIVEN
- 
-    fun load() {
-        viewModelScope.launch {
-            uiState = ChatUiState.Loading
- 
-            // TODO 9: call repository.getMessages() and put the answer in a `when`.
-            //   - on Success: if the list is empty use ChatUiState.Empty,
-            //                 otherwise use ChatUiState.Ready(the list)
-            //   - on NoInternet: ChatUiState.Error("No internet connection.")
-            //   - on Timeout:    ChatUiState.Error("The server took too long.")
-            //   - on anything else: ChatUiState.Error("Something went wrong.")
- 
-        }
-    }
- 
-    fun send() {
-        // TODO 10: do nothing if myName or draft is blank. Just return.
- 
-        viewModelScope.launch {
-            // TODO 11: call repository.sendMessage(myName, draft).
-            //          If it is a Success, clear the draft (draft = "") and call load().
-            //          If it is a Failure, set uiState to
-            //          ChatUiState.Error("Could not send. Check your connection.")
- 
-        }
-    }
-}HINTS
-• TODO 9 starts:   uiState = when (val r = repository.getMessages()) {
-• Inside that when, the first branch is:   is AppResult.Success -> if (r.data.isEmpty()) ChatUiState.Empty else ChatUiState.Ready(r.data)
-• The next branches are:   AppResult.Failure.NoInternet -> ChatUiState.Error("No internet connection.")   and the same shape for Timeout.
-• Finish the when with:   is AppResult.Failure -> ChatUiState.Error("Something went wrong.")
-• TODO 10 is one line:   if (myName.isBlank() || draft.isBlank()) return
-• TODO 11 looks like:   when (repository.sendMessage(myName, draft)) { is AppResult.Success -> { draft = ""; load() } else -> uiState = ChatUiState.Error(...) }  - again, write it on separate lines.
-• Do not put try/catch in the ViewModel. The repository already handled it.
-Given file · wiring the ViewModel
-Add this companion object inside ChatViewModel, just before the final closing brace.
-Add inside ui/ChatViewModel.kt - you will also need the imports Android Studio suggests
-    companion object {                              // GIVEN (read it, do not change it)
-        val Factory: ViewModelProvider.Factory = viewModelFactory {
-            initializer {
-                ChatViewModel(
-                    ChatRepositoryImpl(NetworkModule.chatApi)
-                )
-            }
-        }
-    }
-TODO 12 · The screen
-Create ui/ChatScreen.kt. Most of it is given. You complete the `when` that draws the four states.
-ui/ChatScreen.kt - the part you complete
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun ChatScreen(
-    viewModel: ChatViewModel = viewModel(factory = ChatViewModel.Factory)
-) {
-    Scaffold(                                       // GIVEN
-        topBar = {
-            TopAppBar(title = { Text("LiceoChat") }, actions = {
-                IconButton(onClick = { viewModel.load() }) {
-                    Icon(Icons.Default.Refresh, contentDescription = "Refresh")
-                }
-            })
-        }
-    ) { padding ->
-        Column(Modifier.padding(padding).fillMaxSize()) {
- 
-            Box(Modifier.weight(1f).fillMaxWidth()) {
-                // TODO 12: draw the four states here.
-                //   when (val state = viewModel.uiState) {
-                //       ChatUiState.Loading -> a CircularProgressIndicator, centred
-                //       ChatUiState.Empty   -> a Text: "No messages yet. Say hello!"
-                //       is ChatUiState.Ready -> a LazyColumn of MessageRow(message),
-                //                               with  key = { it.id }
-                //       is ChatUiState.Error -> a Column with the message AND
-                //                               a Button that calls viewModel.load()
-                //   }
- 
-            }
- 
-            MessageInput(                    // GIVEN - name box, text box, Send button
-                name = viewModel.myName,
-                draft = viewModel.draft,
-                onNameChange = viewModel::onNameChange,
-                onDraftChange = viewModel::onDraftChange,
-                onSend = viewModel::send
-            )
-        }
-    }
-}HINTS
-• Start with:   when (val state = viewModel.uiState) {
-• For Loading:   CircularProgressIndicator(Modifier.align(Alignment.Center))
-• For Ready:   LazyColumn(Modifier.fillMaxSize()) { items(state.messages, key = { it.id }) { MessageRow(it) } }
-• For Error, put a Text and a Button inside a Column, and the Button's onClick is { viewModel.load() }.
-• The Error branch must start with the word  is  because Error carries data. Loading and Empty do not, so they have no  is.
-• Do not import anything from retrofit2 in this file. If you need to, something is in the wrong layer.
-Given file · the two small Composables
-Add these to the bottom of ChatScreen.kt. They are ordinary Compose and are not what this activity is testing, so they are written for you.
-ui/ChatScreen.kt - add below ChatScreen
-@Composable                                     // GIVEN (read it, do not change it)
-fun MessageRow(message: Message) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Text(message.sender, style = MaterialTheme.typography.labelLarge)
-        Text(message.text, style = MaterialTheme.typography.bodyMedium)
-    }
-    HorizontalDivider()
-}
- 
-@Composable                                     // GIVEN (read it, do not change it)
-fun MessageInput(
-    name: String,
-    draft: String,
-    onNameChange: (String) -> Unit,
-    onDraftChange: (String) -> Unit,
-    onSend: () -> Unit
-) {
-    Column(Modifier.fillMaxWidth().padding(12.dp)) {
-        OutlinedTextField(
-            value = name,
-            onValueChange = onNameChange,
-            label = { Text("Your full name") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(Modifier.height(8.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(
-                value = draft,
-                onValueChange = onDraftChange,
-                label = { Text("Message") },
-                modifier = Modifier.weight(1f)
-            )
-            Spacer(Modifier.width(8.dp))
-            Button(onClick = onSend) { Text("Send") }
-        }
-    }
-}
-ABOUT THE IMPORTS  Android Studio will underline things in red until the imports are added. Put the cursor on the red word and press Alt+Enter (Option+Enter on a Mac), then choose Import. Do this for each one - it takes about a minute.
-
-Part F  ·  BONUS - Make It Work Offline    (TODO 13 - 14)
-THIS PART IS OPTIONAL  It is worth 10 bonus points on top of the 100. Do it only after Parts A to E work. If Parts A to E are not finished, the bonus earns nothing.
-Right now, with no signal your app shows an error and nothing else. In this part you save the messages into Room, so the screen shows the last messages you received even with the Wi-Fi off.
-TODO 13 · The table and the questions
-Add Room to app/build.gradle.kts, then create data/local/MessageEntity.kt and data/local/MessageDao.kt.
-Room pieces for the bonus
-// in app/build.gradle.kts - GIVEN
-implementation("androidx.room:room-runtime:2.8.4")
-implementation("androidx.room:room-ktx:2.8.4")
-ksp("androidx.room:room-compiler:2.8.4")
- 
-// data/local/MessageEntity.kt
-@Entity(tableName = "messages")
-data class MessageEntity(
-    // TODO 13a: id as the @PrimaryKey, type String
-    // TODO 13b: sender, text (String) and createdAt (Long)
-)
- 
-// data/local/MessageDao.kt
-@Dao
-interface MessageDao {
-    // TODO 13c: a @Query that selects everything from messages,
-    //           ORDER BY createdAt DESC, returning List<MessageEntity>
-    //           (make it a suspend function)
- 
-    // TODO 13d: an @Insert with onConflict = OnConflictStrategy.REPLACE
-    //           taking a List<MessageEntity>, suspend, returning nothing
-}HINTS
-• 13a is:   @PrimaryKey val id: String,
-• 13b is three ordinary lines:   val sender: String,   val text: String,   val createdAt: Long
-• 13c is:   @Query("SELECT * FROM messages ORDER BY createdAt DESC")   then   suspend fun getAll(): List<MessageEntity>
-• 13d is:   @Insert(onConflict = OnConflictStrategy.REPLACE)   then   suspend fun insertAll(items: List<MessageEntity>)
-• You also need a @Database class listing MessageEntity, exactly like the one you wrote in Lab Activity 9.
-• REPLACE matters - without it, saving a message you already have makes the app crash.
-TODO 14 · Use the saved messages when the network fails
-data/repository/ChatRepositoryImpl.kt - bonus version
-// inside ChatRepositoryImpl - the constructor now also takes the dao
-class ChatRepositoryImpl(
-    private val api: ChatApiService,
-    private val dao: MessageDao
-) : ChatRepository {
- 
-    override suspend fun getMessages(): AppResult<List<Message>> {
-        // TODO 14a: try the network first, exactly as in TODO 7.
-        //           If Success, save them into Room with dao.insertAll(...)
-        //           and then return that Success.
- 
-        // TODO 14b: if it is a Failure, read dao.getAll() instead.
-        //           If the saved list is NOT empty, return AppResult.Success with it.
-        //           If it IS empty, return the original Failure.
-    }
-}HINTS
-• You will need two more small mappers: Message.toEntity() and MessageEntity.toDomain(). Write them next to the ones you already have.
-• The shape of 14a is:   val result = safeCall { api.getMessages().toDomain() }   then   if (result is AppResult.Success) { dao.insertAll(result.data.map { it.toEntity() }); return result }
-• For 14b:   val saved = dao.getAll().map { it.toDomain() }   then   return if (saved.isNotEmpty()) AppResult.Success(saved) else result
-• Test it by turning off Wi-Fi and mobile data, then reopening the app. You should still see messages.
-
-5  ·  Test It Before You Submit
-Tick every line. If a line fails, fix it before you push.
-✔What to testWhat you should see☐Open the app with the internet on.A spinner, then a list of messages from your classmates.☐Type your name and a message, then tap Send.Your message appears in the list within a second or two.☐Ask a seatmate to send a message, then tap Refresh.Their message appears on your screen.☐Tap Send with an empty name or empty message.Nothing happens. No crash.☐Turn off Wi-Fi and mobile data, then tap Refresh.An error message AND a working Retry button.☐Turn the internet back on and tap Retry.The list comes back.☐Rotate the phone while the list is showing.The list is still there. It does not reload from empty.☐Open Logcat and filter for OkHttp.You can see the --> request line and the <-- 200 answer.
-6  ·  Screenshots You Must Submit
-Make a folder called screenshots in the root of your project. Save these files inside it, with exactly these names. Screenshots of the emulator or of a real phone are both fine.
-File nameWhat it must showPoints01-loading.pngThe spinner while the app is fetching.102-message-list.pngThe list, with messages from at least THREE different classmates.303-my-message.pngYour own message in the list, with your real name as the sender.204-error-retry.pngThe error state with the Retry button, taken with the internet off.205-logcat.pngLogcat showing the OkHttp --> request and <-- 200 answer lines.106-branch.pngAndroid Studio or the terminal showing you are on lab-activity-10.107-offline.pngBONUS only - the list still showing with the internet off.bonus
-HOW TO TAKE A SCREENSHOT  On the emulator, click the camera icon in the toolbar on the right. In Android Studio, use View then Tool Windows then Running Devices, and click the camera. On a real phone, use the normal screenshot buttons and copy the file to your computer.
-
-7  ·  How to Submit
-Everything must be on the branch lab-activity-10. Run these commands in the Terminal tab, in this order.
-Terminal
-# 1. check you are on the right branch - the star must be on lab-activity-10
-git branch
- 
-# 2. add your code AND your screenshots folder
-git add .
- 
-# 3. commit with a clear message
-git commit -m "Lab Activity 10 - LiceoChat"
- 
-# 4. push the branch to the server
-git push -u origin lab-activity-10
- 
-# 5. check it arrived - open your repository in the browser
-#    and switch to the lab-activity-10 branch. You should see your files.
-THE MOST COMMON SUBMISSION MISTAKE  Students finish the code, then push to main by accident. Run git branch one more time before you push. If the star is on main, run git checkout lab-activity-10 first - your work is still there.
-WHAT MUST BE IN THE BRANCH WHEN YOU PUSH  All the Kotlin files you created in Parts A to E.
-The screenshots folder with the six required images inside it.
-Nothing else - do not commit the build folder or your local.properties.
-
-8  ·  How This Is Marked
-ItemWhat earns full marksPointsBranch and submissionWork is on lab-activity-10, committed and pushed, with the screenshots folder present.5Part B - Message classes
-(TODO 1-3)MessageDto is nullable with defaults; Message has no nullable fields; the mapper supplies a sensible value for every field.15Part C - Retrofit
-(TODO 4-6)@GET and @POST are correct, both functions are suspend, the paths have no leading slash, the base URL ends with a slash, and the app really reaches the server.20Part D - Repository
-(TODO 7-8)Both functions use safeCall, return AppResult, map DTO to domain, and the ViewModel never sees a MessageDto.20Part E - ViewModel and screen
-(TODO 9-12)All four states are produced and drawn; Send works and clears the box; Retry works; the list uses a key.25ScreenshotsAll six files present, correctly named, and showing what the table asks for.10Code qualityFiles are in the right folders, names are clear, no leftover TODO comments, no unused imports.5TOTAL100BONUS - Part F offline
-(TODO 13-14)Room saves the messages and the list still appears with the internet off, proven by 07-offline.png.+10
-
-Quality scale used for each item
-LevelYou getWhat it meansExcellent100%Works exactly as described, clean and readable, nothing missing.Good75%Works, but with small problems - an awkward name, a missing state, an untidy file.Fair50%Partly working, or working but built the wrong way (for example, Retrofit called from the ViewModel).Needs work0-25%Does not compile, does not run, or the section was not attempted.
-Deductions
-ProblemDeductionWork is on the wrong branch (not lab-activity-10)−10The app crashes when it opens−15MessageDto is used inside a Composable or the ViewModel−5The base URL is written inside the ViewModel or the screen instead of NetworkModule−5No error handling - the app crashes or shows nothing when the internet is off−10An empty list is shown as an error instead of the Empty state−3Each missing or wrongly named screenshot−2, taken off the 10 screenshot pointsThe sender is not your real name−5Late submission−5 per day
-
-9  ·  If Something Goes Wrong
-Nearly every problem in this activity is on this page. Find your message in the left column.
-What you seeWhat it meansWhat to dobaseUrl must end in /Your BASE_URL has no slash at the end.Add the slash.404 on a URL that works in the browserYou wrote @GET("/messages") with a slash in front.Remove that slash.SecurityException: Permission deniedThe INTERNET permission is missing.Add it to AndroidManifest.xml (step A3).CLEARTEXT communication not permittedYour address starts with http://Use https:// instead.Serializer has not been found for typeThe class has no @Serializable, or the plugin is missing.Add the annotation; check the plugins block.Expected start of the arrayYou returned MessageDto instead of a list.Change it to List<MessageDto>.Field 'sender' is required but it was missingYour DTO field has no default value.Make it nullable with = null.NetworkOnMainThreadExceptionA function is missing the word suspend.Add suspend to the interface functions.The app compiles but the list is always emptyThe base URL is wrong, or the sort parameters are misspelled.Read the URL printed in Logcat by OkHttp.An empty screen and no error at allYou did not handle every branch of the when.Check TODO 9 covers Success, NoInternet, Timeout and the else.You cannot see anyone else's messagesYou are pointing at the wrong address.Compare your BASE_URL with the board, character by character.Unresolved reference: viewModelA Compose import is missing.Press Alt+Enter on the red text and let Android Studio add it.
-ASK FOR HELP THE RIGHT WAY  Before you raise your hand, open Logcat, filter for OkHttp, and read the last request. Nine times out of ten the answer is on that line - a wrong address, a 404, or no request at all because your code never ran.
-End of Laboratory Activity 10  ·  LiceoChat  ·  Mr. Ernesto Razo Jr.  ·  Liceo de Cagayan University
-Lab Activity 10 · LiceoChat · branch lab-activity-10 · page 
-
